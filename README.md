@@ -61,7 +61,7 @@ a command that merely exits non-zero (e.g. docker not permitted) degrades to a
 2. **Deploy key**: generate a dedicated keypair, authorise it on the Pi, and drop the private key next to `docker-compose.yml` as `pi_id_ed25519` (git-ignored):
    ```bash
    ssh-keygen -t ed25519 -f pi_id_ed25519 -N "" -C "pi-monitoring"
-   ssh-copy-id -i pi_id_ed25519.pub antoine@<pi-tailscale-host>
+   ssh-copy-id -i pi_id_ed25519.pub pi@<pi-tailscale-host>
    ```
    For `/docker` to work, that user must be in the `docker` group on the Pi.
 3. Copy `.env.example` to `.env` and fill in the Discord values and `PI_SSH_HOST` (the Pi's Tailscale hostname/IP). Adjust thresholds if you like.
