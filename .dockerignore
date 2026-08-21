@@ -1,0 +1,9 @@
+.git
+.env
+pi_id_ed25519
+pi_id_ed25519.pub
+keys/
+venv/
+__pycache__/
+*.pyc
+.DS_Store

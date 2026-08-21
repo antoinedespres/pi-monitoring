@@ -1,0 +1,14 @@
+services:
+  pi-monitoring:
+    # Replace "antoinedespres" with your own GitHub username/org if you fork
+    # this repo - the CI workflow pushes to ghcr.io/<owner>/<repo>.
+    image: ghcr.io/antoinedespres/pi-monitoring:latest
+    container_name: pi-monitoring
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      # Read-only deploy key that can SSH into the Pi (path set by
+      # PI_SSH_KEY_PATH in .env, default /keys/pi_id_ed25519). The Pi is
+      # reached over the tailnet, so this VPS must be on the same Tailscale
+      # network as the Pi.
+      - ./pi_id_ed25519:/keys/pi_id_ed25519:ro
