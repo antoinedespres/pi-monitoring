@@ -35,6 +35,26 @@ The background poll loop (`POLL_INTERVAL_SECONDS`, default 60s) sends an embed
 - **CPU / RAM / disk / temperature** cross configurable warn/critical thresholds, with a 🟢 on recovery. (CPU must stay high across two polls to trip, so a momentary spike is ignored.)
 - **Docker containers** going down (🔴), unhealthy (🟠) or recovering (🟢). Containers already stopped when the bot starts are not alerted — only real transitions.
 - **Reboot required** appearing after a package update.
+- **Automatic updates installed** — when `unattended-upgrades` runs on the Pi, an embed lists what it applied, with `old → new` versions, plus anything it installed (new kernels) or removed (old ones). Read back from the Pi's apt history, so it reports what actually landed rather than what was merely pending.
+
+### Installed-update reports
+
+`unattended-upgrades` installs in several small dpkg steps, each its own entry
+in `/var/log/apt/history.log`. The bot waits for that history to go quiet for
+`INSTALLED_UPDATES_SETTLE_SECONDS` (default 180) and then posts **one** embed
+covering the whole run, instead of one per batch. Its own `--dry-run`
+simulations are written to the same log and are deliberately ignored — they
+would otherwise announce upgrades that were never installed.
+
+How far the bot has reported is a timestamp kept in `STATE_PATH`, backed by a
+Docker volume, so a redeploy neither replays the last upgrade nor loses one that
+landed while the container was down. On a first ever start it adopts the present
+rather than replaying the whole log. Manual `apt` runs you make yourself are not
+reported. Set `REPORT_INSTALLED_UPDATES=0` to turn the whole thing off.
+
+Timestamps in these embeds are the Pi's local time: the log's clock is read in
+the same SSH round-trip as the log itself, so nothing has to be reconciled with
+the VPS clock (which runs UTC).
 
 ## How it collects metrics
 
@@ -50,6 +70,7 @@ the output — standard tools only, so there is **nothing to install on the Pi**
 | Top processes | `ps -eo pcpu,rss,pid,comm` |
 | Containers | `docker ps -a --format '{{json .}}'` |
 | Updates | `apt-get -s dist-upgrade`, `test -e /run/reboot-required` |
+| Installed updates | `tail -c /var/log/apt/history.log` (world-readable, no sudo) |
 
 `PiUnreachable` (SSH connect/transport failure) is treated as "Pi down";
 a command that merely exits non-zero (e.g. docker not permitted) degrades to a

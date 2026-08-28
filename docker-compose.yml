@@ -12,3 +12,10 @@ services:
       # reached over the tailnet, so this VPS must be on the same Tailscale
       # network as the Pi.
       - ./pi_id_ed25519:/keys/pi_id_ed25519:ro
+      # Small JSON state file (how far through the Pi's apt history the bot has
+      # already reported), so a redeploy neither replays the last upgrade nor
+      # loses one that landed while the container was down.
+      - pi-monitoring-state:/var/lib/pi-monitoring
+
+volumes:
+  pi-monitoring-state:

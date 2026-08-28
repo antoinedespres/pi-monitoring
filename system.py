@@ -261,6 +261,89 @@ def apt_status(pi):
 
 
 # --------------------------------------------------------------------------- #
+# APT history (what was actually installed, not just what is pending)
+# --------------------------------------------------------------------------- #
+HISTORY_LOG = "/var/log/apt/history.log"
+_HISTORY_MARKER = "--- history ---"
+
+# "wget:arm64 (1.25.0-2ubuntu4.3, 1.25.0-2ubuntu4.4)" -> name, versions.
+# Matched per package rather than split on commas, because the version pairs
+# contain commas themselves.
+_HISTORY_PKG_RE = re.compile(r"([^\s,()]+?)(?::[a-z0-9]+)?\s+\(([^)]*)\)")
+
+
+def _norm_ts(value):
+    """history.log separates date and time with two spaces; collapse it so the
+    fixed-width timestamps compare correctly as plain strings."""
+    return " ".join(value.split()) if value else ""
+
+
+def _parse_history_packages(value):
+    packages = []
+    for name, versions in _HISTORY_PKG_RE.findall(value or ""):
+        parts = [v.strip() for v in versions.split(",")]
+        # Upgrades read "(old, new)"; installs read "(version)" or
+        # "(version, automatic)" when the package came in as a dependency.
+        if len(parts) == 2 and parts[1] != "automatic":
+            packages.append({"name": name, "old": parts[0], "new": parts[1]})
+        else:
+            packages.append({"name": name, "old": None, "new": parts[0]})
+    return packages
+
+
+def apt_history(pi, tail_bytes=200000):
+    """Recent apt transactions, parsed from the Pi's /var/log/apt/history.log.
+
+    Returns {"now": ..., "runs": [...]}, or an {"error": ...} marker. Every
+    timestamp stays in the log's own "YYYY-MM-DD HH:MM:SS" form *in the Pi's
+    local time*, and the Pi's current clock is read in the same round-trip: the
+    bot runs on the VPS in UTC while the Pi is on Europe/Paris, so comparing the
+    two clocks directly would be off by an hour or two. Fixed-width timestamps
+    also sort lexicographically, so the watermark needs no date parsing.
+
+    `unattended` marks a run started by unattended-upgrades. Its --dry-run
+    simulations land in this log too, and are deliberately excluded - reporting
+    them would announce upgrades that were never installed.
+    """
+    _, out, _ = pi.run(
+        f"date '+%Y-%m-%d %H:%M:%S'; echo '{_HISTORY_MARKER}'; "
+        f"tail -c {tail_bytes} {HISTORY_LOG} 2>/dev/null || true"
+    )
+    header, marker, body = out.partition(_HISTORY_MARKER)
+    now = header.strip()
+    if not marker or not now:
+        return {"error": "could not read the apt history on the Pi", "now": None, "runs": []}
+
+    runs = []
+    for block in re.split(r"\n\s*\n", body):
+        entry = {}
+        for line in block.splitlines():
+            key, sep, value = line.partition(":")
+            if sep and key and not key[0].isspace():
+                entry[key.strip()] = value.strip()
+        start = _norm_ts(entry.get("Start-Date", ""))
+        if not start:
+            continue  # tail -c can slice the oldest block in half
+        commandline = entry.get("Commandline", "")
+        runs.append({
+            "start": start,
+            "end": _norm_ts(entry.get("End-Date", "")) or start,
+            "commandline": commandline,
+            "requested_by": entry.get("Requested-By"),
+            "unattended": (commandline.startswith("/usr/bin/unattended-upgrade")
+                           and "--dry-run" not in commandline),
+            "upgrade": _parse_history_packages(entry.get("Upgrade")),
+            "install": _parse_history_packages(entry.get("Install")),
+            "remove": _parse_history_packages(
+                " ".join(v for v in (entry.get("Remove"), entry.get("Purge")) if v)
+            ),
+            "error": entry.get("Error"),
+        })
+    runs.sort(key=lambda r: r["start"])
+    return {"now": now, "runs": runs}
+
+
+# --------------------------------------------------------------------------- #
 # Formatting helpers
 # --------------------------------------------------------------------------- #
 def human_bytes(n):
