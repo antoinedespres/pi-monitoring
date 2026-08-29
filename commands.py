@@ -10,6 +10,7 @@ import logging
 import requests
 
 import system
+from alerting import COLOR, CRITICAL, INFO, OK, WARNING
 from piclient import PiUnreachable
 
 logger = logging.getLogger("pi-monitoring")
@@ -20,10 +21,12 @@ API = "https://discord.com/api/v10"
 TYPE_APPLICATION_COMMAND = 2
 CALLBACK_DEFERRED_CHANNEL_MESSAGE = 5
 
-COLOR_OK = 0x2ECC71
-COLOR_INFO = 0x3498DB
-COLOR_WARN = 0xE67E22
-COLOR_ERROR = 0xE74C3C
+# Aliases onto the shared palette in alerting.py - a command's embed uses the
+# same colour as the alert for the same condition.
+COLOR_OK = COLOR[OK]
+COLOR_INFO = COLOR[INFO]
+COLOR_WARN = COLOR[WARNING]
+COLOR_ERROR = COLOR[CRITICAL]
 
 COMMANDS = [
     {"name": "status", "description": "Overview: CPU, RAM, disk, temperature, uptime, containers, updates"},

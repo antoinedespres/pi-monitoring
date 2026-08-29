@@ -13,11 +13,14 @@ logger = logging.getLogger("pi-monitoring")
 
 OK, WARNING, CRITICAL, INFO = "OK", "WARNING", "CRITICAL", "INFO"
 
+# The bot's one palette. commands.py reuses it rather than repeating the
+# literals, so a slash-command embed and an alert about the same condition can
+# never drift apart.
 COLOR = {
     OK: 0x2ECC71,        # green
     WARNING: 0xE67E22,   # orange
     CRITICAL: 0xE74C3C,  # red
-    INFO: 0x3498DB,      # blue - standalone notice, not part of a monitor's state
+    INFO: 0xCD2355,      # Raspberry Pi red - standalone notice, not a monitor state
 }
 EMOJI = {OK: "✅", WARNING: "⚠️", CRITICAL: "\U0001F6A8", INFO: "\U0001F535"}
 
