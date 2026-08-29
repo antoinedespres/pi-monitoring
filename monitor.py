@@ -19,6 +19,7 @@ something that silently takes the monitor with it.
 import datetime
 import logging
 import os
+import re
 import time
 
 import system
@@ -231,6 +232,41 @@ def _dedupe(packages):
     return unique
 
 
+# Packaging suffixes that repeat on nearly every line of a Raspberry Pi OS
+# upgrade: Debian's "+deb13u1" / "~deb13u2" and Raspberry Pi's own "+rpt1".
+# Requiring a digit after the tag keeps these off version strings that merely
+# contain the letters (+debian1, +debug2).
+_DEB_SUFFIX_RE = re.compile(r"[+~]deb\d[0-9a-z.]*", re.IGNORECASE)
+_RPT_SUFFIX_RE = re.compile(r"[+~]rpt\d[0-9a-z.]*", re.IGNORECASE)
+
+# Tried most-aggressive first. A suffix only earns room on the line when
+# dropping it would leave an upgrade reading as one from a version to itself -
+# which is what a Debian security respin (deb13u1 -> deb13u2) and a Raspberry
+# Pi rebuild (rpt1 -> rpt2) both look like. When it is identical on both sides,
+# as on a chromium version bump, it says nothing and goes.
+_VERSION_TRIMS = (
+    lambda v: _RPT_SUFFIX_RE.sub("", _DEB_SUFFIX_RE.sub("", v)),
+    lambda v: _DEB_SUFFIX_RE.sub("", v),
+    lambda v: v,
+)
+
+
+def _short_version(value):
+    """For a lone version (an install or a removal) there is nothing to tell
+    apart, so the shortest form always applies."""
+    return _VERSION_TRIMS[0](value) if value else value
+
+
+def _short_version_pair(old, new):
+    if not old or not new:
+        return _short_version(old), _short_version(new)
+    for trim in _VERSION_TRIMS:
+        short_old, short_new = trim(old), trim(new)
+        if short_old != short_new:
+            return short_old, short_new
+    return old, new
+
+
 def _clip_lines(lines, limit=1000):
     """Discord caps an embed field value at 1024 characters."""
     kept, total = [], 0
@@ -259,13 +295,14 @@ def _notify_upgrade_session(notifier, host_label, session, apt):
     fields = {}
     if upgraded:
         fields[f"Upgraded ({len(upgraded)})"] = _clip_lines(
-            [f"`{p['name']}` {p['old']} -> {p['new']}" for p in upgraded])
+            [f"`{p['name']}` {old} -> {new}"
+             for p in upgraded for old, new in [_short_version_pair(p["old"], p["new"])]])
     if installed:
         fields[f"Installed ({len(installed)})"] = _clip_lines(
-            [f"`{p['name']}` {p['new']}" for p in installed])
+            [f"`{p['name']}` {_short_version(p['new'])}" for p in installed])
     if removed:
         fields[f"Removed ({len(removed)})"] = _clip_lines(
-            [f"`{p['name']}` {p['old'] or p['new']}" for p in removed])
+            [f"`{p['name']}` {_short_version(p['old'] or p['new'])}" for p in removed])
     if errors:
         fields["Errors"] = _clip_lines(errors)
     if apt.get("reboot_required"):
